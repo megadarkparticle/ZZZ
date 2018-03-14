@@ -1,0 +1,16 @@
+pragma solidity 0.4.21;
+
+contract SimpleContract
+{
+    uint storedData;
+
+    function set(uint x)
+    {
+        storedData = x;
+        
+    }
+    function get () constant returns (uint RetVal)
+    {
+        return storedData;
+    }
+}
