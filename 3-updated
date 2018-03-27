@@ -29,7 +29,8 @@ contract Test1xyz is EIP20Interface {
     uint8 public decimals;                //How many decimals to show.
     string public symbol;                 //An identifier: eg SBX
     
-    uint256 price = 0.0001 ether;
+
+    uint256 price;
     uint256 _initialAmount;
     string _tokenName;
     uint8 _decimalUnits;
@@ -43,7 +44,8 @@ contract Test1xyz is EIP20Interface {
     function Test1xyz() public {
         balances[msg.sender] = 0;       // Give the creator all initial tokens
         totalSupply_ = 0;                // Update total supply
-        Maximumcaptotalsupply = 10000;   // maximumcap for token creation
+        price = 0.01*(10**18);        ////10^18 wei = 1 ether  //price = 0.01*(10**18); 
+        Maximumcaptotalsupply = 1000000;   // maximumcap for token creation
         totalICOable_ = 0;                // ICO available at the moment
         name = "Test1";                     // Set the name for display purposes
         decimals = 18;                      // Amount of decimals for display purposes
@@ -57,12 +59,26 @@ contract Test1xyz is EIP20Interface {
     function totalICOable() public view returns (uint256) {
         return totalICOable_;
     }
+    
+    function set_price_in_micro_ether(uint256 _value) public returns (uint256){
+        if (msg.sender == creatorofthecontract){
+            price = _value*(10**12); // input in micro of ether
+        }
+        return price;
+    }
+    
+    function getprice() public view returns (uint256) {
+        return price;
+    }
 
     function generatetoken(uint256 _value) public returns (bool success) {
 
         if (msg.sender == creatorofthecontract && Maximumcaptotalsupply >= (totalSupply() + _value)){
             balances[msg.sender] += _value;
             totalSupply_ += _value;
+            
+            Transfer (0 , msg.sender, _value);
+            
             return true;
         }
         else {
@@ -126,7 +142,7 @@ contract Test1xyz is EIP20Interface {
         
     }*/
     
-    function crowdsale() public payable { 
+    function() public payable { 
         
         uint256 toMint = msg.value/price;
         
@@ -137,20 +153,19 @@ contract Test1xyz is EIP20Interface {
             
             Transfer (0 , msg.sender, toMint);
         }
-        else if (totalICOable() > totalSupply()){
+        
+        /*else if (totalICOable() > totalSupply()){ // need to find ways to return exceed ether
             if(totalSupply() + toMint > totalICOable()){
-                totalSupply_ += ((totalSupply() + toMint)-totalICOable());
-                balances[msg.sender] += ((totalSupply() + toMint)-totalICOable());
+                  
+                balances[msg.sender] += (totalICOable()-totalSupply());
+                totalSupply_ += (totalICOable()-totalSupply()); //((totalSupply() + toMint)-totalICOable())
             
                 Transfer (0 , msg.sender, toMint);
+                throw;
             }
-        }
+        }*/
         else revert();
         
-    }
-    
-    function () public payable { 
-        revert();
     }
     
     /*
