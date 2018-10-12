@@ -1,0 +1,236 @@
+pragma solidity ^0.4.24;
+
+/**
+ * @title SafeMath
+ * @dev Math operations with safety checks that throw on error
+ */
+library SafeMath {
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+        uint256 c = a * b;
+        assert(c / a == b);
+        return c;
+    }
+
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        // assert(b > 0); // Solidity automatically throws when dividing by 0
+        uint256 c = a / b;
+        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
+        return c;
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        assert(b <= a);
+        return a - b;
+    }
+
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        assert(c >= a);
+        return c;
+    }
+}
+
+/**
+ * @title Secondary
+ * @dev A Secondary contract can only be used by its primary account (the one that created it)
+ */
+contract Secondary {
+  address private _primary;
+
+  /**
+   * @dev Sets the primary account to the one that is creating the Secondary contract.
+   */
+  constructor() public {
+    _primary = msg.sender;
+  }
+
+  /**
+   * @dev Reverts if called from any account other than the primary.
+   */
+  modifier onlyPrimary() {
+    require(msg.sender == _primary);
+    _;
+  }
+
+  function primary() public view returns (address) {
+    return _primary;
+  }
+
+  function transferPrimary(address recipient) public onlyPrimary {
+    require(recipient != address(0));
+
+    _primary = recipient;
+  }
+}
+
+contract Escrow is Secondary {
+  using SafeMath for uint256;
+
+  event Deposited(address indexed payee, uint256 weiAmount);
+  event Withdrawn(address indexed payee, uint256 weiAmount);
+
+  mapping(address => uint256) private _deposits;
+
+  function depositsOf(address payee) public view returns (uint256) {
+    return _deposits[payee];
+  }
+
+  /**
+  * @dev Stores the sent amount as credit to be withdrawn.
+  * @param payee The destination address of the funds.
+  */
+  function deposit(address payee) public payable { // เดิม function deposit(address payee) public onlyPrimary payable 
+    uint256 amount = msg.value;
+    _deposits[payee] = _deposits[payee].add(amount);
+
+    emit Deposited(payee, amount);
+  }
+
+  /**
+  * @dev Withdraw accumulated balance for a payee.
+  * @param payee The address whose funds will be withdrawn and transferred to.
+  */
+  function withdraw(address payee) public onlyPrimary {
+    uint256 payment = _deposits[payee];
+
+    _deposits[payee] = 0;
+
+    payee.transfer(payment);
+
+    emit Withdrawn(payee, payment);
+  }
+}
+
+/**
+ * @title ConditionalEscrow
+ * @dev Base abstract escrow to only allow withdrawal if a condition is met.
+ */
+contract ConditionalEscrow is Escrow {
+  /**
+  * @dev Returns whether an address is allowed to withdraw their funds. To be
+  * implemented by derived contracts.
+  * @param payee The destination address of the funds.
+  */
+  function withdrawalAllowed(address payee) public view returns (bool);
+
+  function withdraw(address payee) public {
+    require(withdrawalAllowed(payee));
+    super.withdraw(payee);
+  }
+}
+
+/**
+ * @title RefundEscrow
+ * @dev Escrow that holds funds for a beneficiary, deposited from multiple parties.
+ * The primary account may close the deposit period, and allow for either withdrawal
+ * by the beneficiary, or refunds to the depositors.
+ */
+
+contract RefundEscrow is ConditionalEscrow {
+  enum State { Active, Refunding, Closed }
+
+  event Closed();
+  event RefundsEnabled();
+  bool is_softcap = false;
+  bool is_sell_finished = false;
+
+  State private _state;
+  address private _beneficiary;
+
+  /**
+   * @dev Constructor.
+   * @param beneficiary The beneficiary of the deposits.
+   */
+  constructor(address beneficiary) public {
+    require(beneficiary != address(0));
+    _beneficiary = beneficiary;
+    _state = State.Active;
+  }
+
+  /**
+   * @return the current state of the escrow.
+   */
+  function state() public view returns (State) {
+    return _state;
+  }
+
+  /**
+   * @return the beneficiary of the escrow.
+   */
+  function beneficiary() public view returns (address) {
+    return _beneficiary;
+  }
+
+  /**
+   * @dev Stores funds that may later be refunded.
+   * @param refundee The address funds will be sent to if a refund occurs.
+   */
+  function deposit(address refundee) public payable {
+    require(_state == State.Active);
+    super.deposit(refundee);
+  }
+
+  /**
+   * @dev Allows for the beneficiary to withdraw their funds, rejecting
+   * further deposits.
+   */
+  function close() public onlyPrimary {
+    require(_state == State.Active && is_sell_finished == true && is_softcap == true); // เพิ่มเงื่อนไข soft cap + time
+    _state = State.Closed;
+    emit Closed();
+  }
+
+  /**
+   * @dev Allows for refunds to take place, rejecting further deposits.
+   */
+  function enableRefunds() public onlyPrimary {
+    require(_state == State.Active);
+    _state = State.Refunding;
+    emit RefundsEnabled();
+  }
+
+  /**
+   * @dev Withdraws the beneficiary's funds.
+   */
+  function beneficiaryWithdraw() public {
+    require(_state == State.Closed);
+    _beneficiary.transfer(address(this).balance);
+  }
+
+  /**
+   * @dev Returns whether refundees can withdraw their deposits (be refunded).
+   */
+  function withdrawalAllowed(address payee) public view returns (bool) {
+    return _state == State.Refunding;
+  }
+  
+  // เพิ่มเงื่อนไขของ escrow
+  function get_sale_status() public view returns (bool) {
+    return is_sell_finished;
+  }
+  
+  function get_softcap_status() public view returns (bool) {
+    return is_softcap;
+  }
+  
+  function set_sale_status_true() public onlyPrimary returns (bool){
+    return is_sell_finished = true;
+  }
+  
+  function set_sale_status_false() public onlyPrimary returns (bool) {
+    return is_sell_finished = false;
+  }
+  
+  function set_is_softcap_true()public onlyPrimary returns (bool) {
+    return is_softcap = true;
+  }
+  
+  function set_is_softcap_false()public onlyPrimary returns (bool) {
+    return is_softcap = false;
+  }
+
+
+}
