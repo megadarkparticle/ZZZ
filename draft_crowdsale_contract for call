@@ -1,0 +1,25 @@
+pragma solidity ^0.4.24;
+
+import './WhitelistContract.sol';
+
+contract whitelistInterface{
+    function addAddressToWhitelist(address addr) public returns(bool success);
+    function addAddressesToWhitelist(address[] addrs) public returns(bool success);
+    function removeAddressFromWhitelist(address addr) public returns(bool success);
+    function removeAddressesFromWhitelist(address[] addrs) public returns(bool success);
+    function getwhitelist(address _address) public view returns (bool success);
+}
+
+contract Maincontract{
+    
+    address whitelistaddress = 0x692a70d2e424a56d2c6c27aa97d1a86395877b3a;
+    whitelistInterface whitelistcontract = whitelistInterface(whitelistaddress);
+    
+    /*function addwhitelist(address _whitelist) public {
+        whitelistcontract.addAddressToWhitelist(_whitelist);
+    }*/
+    
+    function iswhitelist(address _address) public view returns (bool) {
+        return whitelistcontract.getwhitelist(_address);
+    }
+}
